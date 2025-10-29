@@ -1,4 +1,4 @@
-import sys, os, random
+import sys, os, random, json
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QApplication,
@@ -10,6 +10,10 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtUiTools import QUiLoader
 from PySide6 import QtCore, QtWidgets
+from pathlib import Path
+
+
+LEVELS_FILE = Path("levels.json")
 
 
 # Function to get the resource path for loading UI files
@@ -19,6 +23,107 @@ def get_resource_path(path):
     except Exception:
         base_path = os.path.abspath(".")
     return os.path.join(base_path, path)
+
+
+# Load levels from levels.json
+def load_levels():
+    if LEVELS_FILE.exists():
+        with open(LEVELS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("levels", [])
+    else:
+        print("No levels.json found — using default level")
+        return [
+            {
+                "id": "default",
+                "name": "Default",
+                "scene_rect": [-400, -200, 800, 400],
+                "snake_start": [0, 0],
+                "snake_direction": "right",
+                "timer_interval": 150,
+                "obstacles": []
+            }
+        ]
+
+
+# def apply_level(self, level):
+#     # Scene rect
+#     sx, sy, sw, sh = level.get("scene_rect", [-400, -200, 800, 400])
+#     self.scene.setSceneRect(sx, sy, sw, sh)
+
+#     # Clear existing obstacles
+#     for item in list(self.obstacles):
+#         try:
+#             self.scene.removeItem(item)
+#         except Exception:
+#             pass
+#     self.obstacles.clear()
+
+#     # Add obstacles from level
+#     for obs in level.get("obstacles", []):
+#         rect_item = QGraphicsRectItem(obs["x"], obs["y"], obs["w"], obs["h"])
+#         rect_item.setBrush(QBrush(QColor(100, 100, 100)))
+#         rect_item.setFlag(QGraphicsRectItem.ItemIsSelectable, False)
+#         self.scene.addItem(rect_item)
+#         self.obstacles.append(rect_item)
+
+#     # Ensure the snake spawns safely within scene bounds
+#     sx0, sy0 = level.get("snake_start", [0, 0])
+#     direction_name = level.get("snake_direction", "right")
+#     directions = {
+#         "right": (1, 0),
+#         "left": (-1, 0),
+#         "up": (0, -1),
+#         "down": (0, 1)
+#     }
+#     self.snake.direction = directions.get(direction_name, (1, 0))
+
+#     # Clamp spawn point so it's always inside the visible scene
+#     rect = self.scene.sceneRect()
+#     cube_size = 15
+#     if sx0 < rect.left() + cube_size:
+#         sx0 = rect.left() + cube_size
+#     elif sx0 > rect.right() - cube_size:
+#         sx0 = rect.right() - cube_size
+#     if sy0 < rect.top() + cube_size:
+#         sy0 = rect.top() + cube_size
+#     elif sy0 > rect.bottom() - cube_size:
+#         sy0 = rect.bottom() - cube_size
+
+#     # Ensure safe spawn (avoid spawning on obstacles)
+#     def is_safe(x, y):
+#         test_rect = QtCore.QRectF(x, y, cube_size, cube_size)
+#         for obs in self.obstacles:
+#             if test_rect.intersects(obs.rect().translated(obs.x(), obs.y())):
+#                 return False
+#         return True
+
+#     if not is_safe(sx0, sy0):
+#         # Snake spawn blocked by obstacle — finding new position
+#         rect = self.scene.sceneRect()
+#         found = False
+#         step = cube_size * 2
+#         # scan for an open area within the scene
+#         for y in range(int(rect.top()), int(rect.bottom()), step):
+#             for x in range(int(rect.left()), int(rect.right()), step):
+#                 if is_safe(x, y):
+#                     sx0, sy0 = x, y
+#                     found = True
+#                     break
+#             if found:
+#                 break
+
+#     head = self.snake.cube_list[0]
+#     head.setPos(sx0, sy0)
+
+#     for i, cube in enumerate(self.snake.cube_list[1:], start=1):
+#         cube.setPos(sx0 - i * cube_size * self.snake.direction[0],
+#                     sy0 - i * cube_size * self.snake.direction[1])
+
+#     # Add to scene
+#     for cube in self.snake.cube_list:
+#         if cube.scene() != self.scene:
+#             self.scene.addItem(cube)
 
 
 # Class representing Food item for the snake to consume
@@ -127,7 +232,119 @@ class MainWindow(QMainWindow):
         self.quit_button = None
         self.show_start_menu()
 
+        self.levels = load_levels()
+        self.current_level = self.levels[0]  # default level
+
         self.window.show()
+
+    def apply_level(self, level):
+        # ensure a consistent cube size value
+        self.cube_size = getattr(self, "cube_size", 15)
+
+        self._set_scene_rect(level)
+        self._load_obstacles(level)
+        self._set_snake_start(level)
+        self._ensure_snake_safe_spawn()
+        self._position_and_add_snake()
+
+    def _set_scene_rect(self, level):
+        sx, sy, sw, sh = level.get("scene_rect", [-400, -200, 800, 400])
+        self.scene.setSceneRect(sx, sy, sw, sh)
+
+    def _load_obstacles(self, level):
+        # Remove existing obstacle items from the scene (safe)
+        for item in list(self.obstacles):
+            try:
+                if item.scene() == self.scene:
+                    self.scene.removeItem(item)
+            except Exception:
+                pass
+        self.obstacles.clear()
+
+        # Create and add new obstacles with visible color
+        for obs in level.get("obstacles", []):
+            rect_item = QGraphicsRectItem(obs["x"], obs["y"], obs["w"], obs["h"])
+            # Set a visible brush (non-colorless)
+            rect_item.setBrush(QBrush(QColor(100, 100, 100)))  # gray
+            rect_item.setPen(QtCore.Qt.NoPen)
+            # Prevent selection and interaction
+            try:
+                rect_item.setFlag(QGraphicsRectItem.ItemIsSelectable, False)
+            except Exception:
+                # If the Qt binding presents flag differently, ignore
+                pass
+            self.scene.addItem(rect_item)
+            self.obstacles.append(rect_item)
+
+    def _set_snake_start(self, level):
+        sx0, sy0 = level.get("snake_start", [0, 0])
+        direction_name = level.get("snake_direction", "right")
+        directions = {
+            "right": (1, 0),
+            "left": (-1, 0),
+            "up": (0, -1),
+            "down": (0, 1)
+        }
+        self.snake.direction = directions.get(direction_name, (1, 0))
+        # store start position for the next step
+        self._snake_target_start = [sx0, sy0]
+
+    def _ensure_snake_safe_spawn(self):
+        rect = self.scene.sceneRect()
+        cube = self.cube_size
+        sx0, sy0 = self._snake_target_start
+
+        # clamp coordinates inside the visible scene (accounting for one cube)
+        sx0 = max(rect.left() + cube, min(rect.right() - cube, sx0))
+        sy0 = max(rect.top() + cube, min(rect.bottom() - cube, sy0))
+
+        # inner helper: is a cube-sized rect at (x,y) free of obstacles?
+        def is_safe(x, y):
+            test_rect = QtCore.QRectF(x, y, cube, cube)
+            for obs in self.obstacles:
+                # obs.rect() is local rect (0,0,w,h) — translate to scene pos
+                obs_scene_rect = obs.rect().translated(obs.x(), obs.y())
+                if test_rect.intersects(obs_scene_rect):
+                    return False
+            return True
+
+        if not is_safe(sx0, sy0):
+            found = False
+            step = cube * 2
+            # scan the scene in a grid for an open spot
+            top = int(rect.top())
+            bottom = int(rect.bottom())
+            left = int(rect.left())
+            right = int(rect.right())
+
+            for y in range(top, bottom + 1, step):
+                for x in range(left, right + 1, step):
+                    if is_safe(x, y):
+                        sx0, sy0 = x, y
+                        found = True
+                        break
+                if found:
+                    break
+
+        self._snake_target_start = [sx0, sy0]
+
+    def _position_and_add_snake(self):
+        sx0, sy0 = self._snake_target_start
+        cube = self.cube_size
+
+        # place head
+        head = self.snake.cube_list[0]
+        head.setPos(sx0, sy0)
+
+        # place following cubes trailing in the opposite direction of motion
+        for i, cube_item in enumerate(self.snake.cube_list[1:], start=1):
+            dx, dy = self.snake.direction
+            cube_item.setPos(sx0 - i * cube * dx, sy0 - i * cube * dy)
+
+        # add any not-in-scene cubes to the scene
+        for cube_item in self.snake.cube_list:
+            if cube_item.scene() != self.scene:
+                self.scene.addItem(cube_item)
 
     def update_score(self):
         self.scoreLabel.setText(f"Score: {self.snake.score}")
@@ -311,14 +528,54 @@ class MainWindow(QMainWindow):
         QApplication.quit()
 
     def start_game(self):
+        '''-----------OLD CODE START-----------'''
+        # self.start_button.deleteLater()
+        # self.quit_button.deleteLater()
+        # self.in_menu = False
+        # self.snake = Snake()
+        # self.create_food()
+        # self.obstacles.clear()  # Clear any existing obstacles
+        # self.food_count = 0  # Reset food count
+        # self.timer.start(150)  # Reset game timer
+        # self.update_score()
+        '''-----------OLD CODE FINISH-----------'''
+
+        # Stop game timer to avoid background movement
+        self.timer.stop()
+
         self.start_button.deleteLater()
         self.quit_button.deleteLater()
+
+        # Stay in menu mode until the user chooses a level
+        self.in_menu = True
+
+        # Ask user to choose a level
+        level_names = [lvl["name"] for lvl in self.levels]
+        selected, ok = QtWidgets.QInputDialog.getItem(
+            self.window, "Choose Level", "Select a level:", level_names, 0, False
+        )
+
+        if not ok:
+            # User canceled => back to menu
+            self.show_start_menu()
+            return
+
+        # Now that level is chosen, exit menu mode
         self.in_menu = False
+
+        # Find selected level and apply it
+        for lvl in self.levels:
+            if lvl["name"] == selected:
+                self.current_level = lvl
+                break
+
         self.snake = Snake()
         self.create_food()
-        self.obstacles.clear()  # Clear any existing obstacles
-        self.food_count = 0  # Reset food count
-        self.timer.start(150)  # Reset game timer
+        self.obstacles.clear()
+        self.food_count = 0
+
+        # Start timer *after* setup
+        self.timer.start(self.current_level.get("timer_interval", 150))
         self.update_score()
 
 
