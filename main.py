@@ -203,9 +203,18 @@ class MainWindow(QMainWindow):
         head = self.snake.cube_list[0]
 
         # Check collision with boundaries using scene's bounding rectangle
-        if not self.scene.sceneRect().contains(head.sceneBoundingRect()):
-            self.game_over()
-            return
+        scene_rect = self.scene.sceneRect()
+        head_rect = head.sceneBoundingRect()
+
+        # Teleport behavior
+        if head_rect.right() > scene_rect.right():
+            head.setX(scene_rect.left())
+        elif head_rect.left() < scene_rect.left():
+            head.setX(scene_rect.right() - head_rect.width())
+        elif head_rect.bottom() > scene_rect.bottom():
+            head.setY(scene_rect.top())
+        elif head_rect.top() < scene_rect.top():
+            head.setY(scene_rect.bottom() - head_rect.height())
 
         # Check self-collision by comparing positions
         head_pos = (head.x(), head.y())
