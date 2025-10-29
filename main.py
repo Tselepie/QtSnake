@@ -46,86 +46,6 @@ def load_levels():
         ]
 
 
-# def apply_level(self, level):
-#     # Scene rect
-#     sx, sy, sw, sh = level.get("scene_rect", [-400, -200, 800, 400])
-#     self.scene.setSceneRect(sx, sy, sw, sh)
-
-#     # Clear existing obstacles
-#     for item in list(self.obstacles):
-#         try:
-#             self.scene.removeItem(item)
-#         except Exception:
-#             pass
-#     self.obstacles.clear()
-
-#     # Add obstacles from level
-#     for obs in level.get("obstacles", []):
-#         rect_item = QGraphicsRectItem(obs["x"], obs["y"], obs["w"], obs["h"])
-#         rect_item.setBrush(QBrush(QColor(100, 100, 100)))
-#         rect_item.setFlag(QGraphicsRectItem.ItemIsSelectable, False)
-#         self.scene.addItem(rect_item)
-#         self.obstacles.append(rect_item)
-
-#     # Ensure the snake spawns safely within scene bounds
-#     sx0, sy0 = level.get("snake_start", [0, 0])
-#     direction_name = level.get("snake_direction", "right")
-#     directions = {
-#         "right": (1, 0),
-#         "left": (-1, 0),
-#         "up": (0, -1),
-#         "down": (0, 1)
-#     }
-#     self.snake.direction = directions.get(direction_name, (1, 0))
-
-#     # Clamp spawn point so it's always inside the visible scene
-#     rect = self.scene.sceneRect()
-#     cube_size = 15
-#     if sx0 < rect.left() + cube_size:
-#         sx0 = rect.left() + cube_size
-#     elif sx0 > rect.right() - cube_size:
-#         sx0 = rect.right() - cube_size
-#     if sy0 < rect.top() + cube_size:
-#         sy0 = rect.top() + cube_size
-#     elif sy0 > rect.bottom() - cube_size:
-#         sy0 = rect.bottom() - cube_size
-
-#     # Ensure safe spawn (avoid spawning on obstacles)
-#     def is_safe(x, y):
-#         test_rect = QtCore.QRectF(x, y, cube_size, cube_size)
-#         for obs in self.obstacles:
-#             if test_rect.intersects(obs.rect().translated(obs.x(), obs.y())):
-#                 return False
-#         return True
-
-#     if not is_safe(sx0, sy0):
-#         # Snake spawn blocked by obstacle — finding new position
-#         rect = self.scene.sceneRect()
-#         found = False
-#         step = cube_size * 2
-#         # scan for an open area within the scene
-#         for y in range(int(rect.top()), int(rect.bottom()), step):
-#             for x in range(int(rect.left()), int(rect.right()), step):
-#                 if is_safe(x, y):
-#                     sx0, sy0 = x, y
-#                     found = True
-#                     break
-#             if found:
-#                 break
-
-#     head = self.snake.cube_list[0]
-#     head.setPos(sx0, sy0)
-
-#     for i, cube in enumerate(self.snake.cube_list[1:], start=1):
-#         cube.setPos(sx0 - i * cube_size * self.snake.direction[0],
-#                     sy0 - i * cube_size * self.snake.direction[1])
-
-#     # Add to scene
-#     for cube in self.snake.cube_list:
-#         if cube.scene() != self.scene:
-#             self.scene.addItem(cube)
-
-
 # Class representing Food item for the snake to consume
 class Food(QGraphicsRectItem):
     def __init__(self):
@@ -238,7 +158,7 @@ class MainWindow(QMainWindow):
         self.window.show()
 
     def apply_level(self, level):
-        # ensure a consistent cube size value
+        # Ensure a consistent cube size value
         self.cube_size = getattr(self, "cube_size", 15)
 
         self._set_scene_rect(level)
@@ -252,7 +172,7 @@ class MainWindow(QMainWindow):
         self.scene.setSceneRect(sx, sy, sw, sh)
 
     def _load_obstacles(self, level):
-        # Remove existing obstacle items from the scene (safe)
+        # Remove existing obstacle items from the scene
         for item in list(self.obstacles):
             try:
                 if item.scene() == self.scene:
@@ -286,7 +206,7 @@ class MainWindow(QMainWindow):
             "down": (0, 1)
         }
         self.snake.direction = directions.get(direction_name, (1, 0))
-        # store start position for the next step
+        # Stores start position for the next step
         self._snake_target_start = [sx0, sy0]
 
     def _ensure_snake_safe_spawn(self):
@@ -294,7 +214,7 @@ class MainWindow(QMainWindow):
         cube = self.cube_size
         sx0, sy0 = self._snake_target_start
 
-        # clamp coordinates inside the visible scene (accounting for one cube)
+        # Clamp coordinates inside the visible scene (accounting for one cube)
         sx0 = max(rect.left() + cube, min(rect.right() - cube, sx0))
         sy0 = max(rect.top() + cube, min(rect.bottom() - cube, sy0))
 
@@ -302,7 +222,7 @@ class MainWindow(QMainWindow):
         def is_safe(x, y):
             test_rect = QtCore.QRectF(x, y, cube, cube)
             for obs in self.obstacles:
-                # obs.rect() is local rect (0,0,w,h) — translate to scene pos
+                # obs.rect() is local rect (0,0,w,h) => translate to scene pos
                 obs_scene_rect = obs.rect().translated(obs.x(), obs.y())
                 if test_rect.intersects(obs_scene_rect):
                     return False
@@ -311,7 +231,7 @@ class MainWindow(QMainWindow):
         if not is_safe(sx0, sy0):
             found = False
             step = cube * 2
-            # scan the scene in a grid for an open spot
+            # Scan the scene in a grid for an open spot
             top = int(rect.top())
             bottom = int(rect.bottom())
             left = int(rect.left())
@@ -332,16 +252,16 @@ class MainWindow(QMainWindow):
         sx0, sy0 = self._snake_target_start
         cube = self.cube_size
 
-        # place head
+        # Place head
         head = self.snake.cube_list[0]
         head.setPos(sx0, sy0)
 
-        # place following cubes trailing in the opposite direction of motion
+        # Place following cubes trailing in the opposite direction of motion
         for i, cube_item in enumerate(self.snake.cube_list[1:], start=1):
             dx, dy = self.snake.direction
             cube_item.setPos(sx0 - i * cube * dx, sy0 - i * cube * dy)
 
-        # add any not-in-scene cubes to the scene
+        # Add any not-in-scene cubes to the scene
         for cube_item in self.snake.cube_list:
             if cube_item.scene() != self.scene:
                 self.scene.addItem(cube_item)
